@@ -1,0 +1,158 @@
+#!/usr/bin/python
+import math
+import sys
+"""Defining the vector dictionary for each file. The vector dictionary is basically a dictionary of dictionaries. eg. {'001.html':{index_term1: weight1, index_term2:weight2}}"""
+#vectors  = { }
+
+
+"""Defining the cluster class"""
+class cluster:
+	def __init__(self, cluster_name, cluster_len):
+		self.cluster_len = int(cluster_len)
+		
+"""cluster information vector. This vector directly stores clusters. When a newer cluster gets formed, the cluster with the higher rating is always retained.Clusters which have been merged with pther clusters will evenutally be replaced with a 0 in the list. THIS HAS A ZERO ATTACHED AT POSITION ZERO TO MAKE SURE THAT DOCUMENT NUMBER REMIAINS CONSISTENT WITH THE INDEX"""
+cluster_info = [0]
+
+
+"""Writing a function to calculate similarity for two clusters"""
+#def similarity(cluster1, cluster2):
+	
+
+def clusterup(grid, vectorlist):
+	clusters = [str(i) for i in range(1, 504)]
+	while(len(grid) > 1):
+		distances = [(1, 0, grid[1][0])]
+		for i, row in enumerate(grid[2:]):
+			distances += [(i + 2, j, c) for j, c in enumerate(row[:i + 2])]
+		#print distances
+		distances = sorted(distances, key = lambda x:x[2][0], reverse = True)	
+		j, i, _ = distances[0]
+		#print i
+		#print j
+		#print _[1]
+		#sys.exit(1)
+		for r in grid:
+			
+			r[j][0] = max(r[i][0], r[j][0])
+			print r[j]
+			r[j][2] = _[1] + " " + _[2] 
+			r.pop(i)
+		row_values_for_j = [rowval[1] for rowval in grid[j]]
+		nums_in_i = [numsi[0] for numsi in grid[i]]
+		nums_in_j = [numsj[0] for numsj in grid[j]] 
+		new_grid_vals_j = map(max, zip(nums_in_j, nums_in_i)) 
+		fuckinlist = []
+		for jhol in range(0, len(new_grid_vals_j)):
+			tempelem = [new_grid_vals_j[jhol], row_values_for_j[jhol], _[1] + " " +_[2]]
+			fuckinlist.append(tempelem)
+		grid[j] = fuckinlist
+		grid.pop(i)
+	#print grid
+
+
+
+"""This function makes the initial grid for all 503 document similarities, this takes in vector.items() as vectorlist"""
+def makegrid(vectorlist):
+	grid  = []
+	for i in range(0, len(vectorlist)):
+		temp = []
+		i_vector = vectorlist[i][1]
+		if i_vector != "empty":
+			i_vector_keys = i_vector.keys()
+		for j in range(0, len(vectorlist)):
+			j_vector = vectorlist[j][1]
+			if(i_vector != "empty")and(j_vector != "empty"):
+				j_vector_keys = j_vector.keys()
+				intersection = list(set(i_vector_keys) & set(j_vector_keys))
+				weight = 0
+				for word in intersection:
+					weight += i_vector[word] * j_vector[word]
+				iwordweight = 0
+				for iword in i_vector_keys:
+					iwordweight += i_vector[iword] ** 2
+				iwordweight = math.sqrt(iwordweight)
+				jwordweight = 0
+				for jword in j_vector_keys:
+					jwordweight += j_vector[jword] ** 2
+				jwordweight = math.sqrt(jwordweight)
+				total_denom = iwordweight * jwordweight
+				temp.append(weight / total_denom)
+			else:
+				if i != j:
+					temp.append(0)
+				else:
+					temp.append(1.0)
+		grid.append(temp)
+	return grid
+
+def reformulate_grid(grid):
+	for i in range(0, len(grid)):
+		for j in range(0, len(grid[i])):
+			temp = grid[i][j]
+			grid[i][j] = [temp, str(i + 1) + ".html", str(j + 1) + ".html"]
+	return grid
+			
+
+
+
+"""Construct a 504  * 504 matrix. Extract the index terms associated with each file from the dictionary and postings file """
+def main():
+	vector = {}	
+	postings = open("postings", r"U")
+	post = postings.readlines()
+	#print post
+	postings.close()
+	dictionary = open("dictionary", r"U")
+	wdict = dictionary.readlines()
+	dictionary.close()
+	count = 0
+	for i in wdict:
+		if count == 0:
+			word = i.strip()
+			count += 1
+		elif count == 1:
+			num_files = int(i.strip())
+			count += 1
+		elif count == 2:
+			count = 0
+			start_pos = int(i.strip())
+			#print start_pos
+			for index in range(start_pos, start_pos + num_files):
+				line = post[index - 1]
+				line.strip()
+				line = line.split()
+				try:
+					tempdict = vector[line[0] + '.html']
+					tempdict[word] = float(line[1])
+					vector[line[0] + '.html'] = tempdict
+				except:
+					tempdict = {}
+					tempdict[word] = float(line[1])
+					vector[line[0] + '.html'] = tempdict
+
+	#Duct-taping :P
+	for i in ['45', '111', '155', '496']:
+		vector[i + '.html'] = "empty"
+	
+	grid = makegrid(vector.items())
+	grid = reformulate_grid(grid)
+	#print grid
+	clusterup(grid, vector.items())
+	"""<	TESTING ROUTINE TO CHECK IF THE VECTORS FOR ALL THE DOCUMENTS HAVE BEEN CREATED. >"""		
+	"""#print vector
+	temp = [0] * 504
+	for i in (sorted(vector.keys())):
+		i = i[:-5]	
+		i = int(i)
+		temp[i]	= 1
+	for elem in range(1, 504):
+		if temp[elem] == 0:
+			print elem	
+	"""
+if __name__ == "__main__":
+	main()
+
+
+"""Use cosine similarity to achieve document similarity scores"""
+"""While constructing the matrix, we assume that every element is initially completely dissimilar with everything else present"""
+ 
