@@ -1,0 +1,193 @@
+#!/usr/bin/env python
+import time
+import sys
+import re
+from HTMLParser import HTMLParser
+from re import sub
+from sys import stderr
+from traceback import print_exc
+import os
+import glob
+import math
+class _DeHTMLParser(HTMLParser):
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.__text = []
+
+    def handle_data(self, data):
+        text = data.strip()
+        if len(text) > 0:
+            text = sub('[ \t\r\n]+', ' ', text)
+            self.__text.append(text + ' ')
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'p':
+            self.__text.append('\n\n')
+        elif tag == 'br':
+            self.__text.append('\n')
+
+    def handle_startendtag(self, tag, attrs):
+        if tag == 'br':
+            self.__text.append('\n\n')
+
+    def text(self):
+        return ''.join(self.__text).strip()
+
+
+def dehtml(text):
+    try:
+        parser = _DeHTMLParser()
+        parser.feed(text)
+        parser.close()
+        return parser.text()
+    except:
+        print_exc(file=stderr)
+        return text
+
+
+def clear_one_stuff(actual_text):
+	#delete every word which has a frequency of one and and everyword which is one letter in length. 
+	no_one_stuff = []
+	for i in actual_text:
+		if(len(i) == 1) or (actual_text.count(i) == 1):
+			pass
+		else:
+			no_one_stuff.append(i)
+	return no_one_stuff
+			
+	
+def clear_stop_words(actual_text, stop):
+	#Read in stop words as a list and clear them out 
+	refined_text = []
+	for i in actual_text:
+		if i in stop:
+			pass
+		else:
+			refined_text.append(i)
+
+	return refined_text
+			
+def create_file_dict(html_file, stop_list):
+		file_dict = {}
+		#print html_file
+		fp = open(html_file, r'U')
+		text = dehtml(fp.read().lower())
+		fp.close()
+		actual_text = ''
+		#weed out speical charecters, numbers etc....
+		ac = range(97, 123) +  range(129, 142) + range(147, 153) + [32, 162, 163, 233]
+		for i in text:
+			if ord(i) in ac:
+				actual_text += i
+			else:
+				actual_text += ' '
+		actual_text = actual_text.split()
+		actual_text = clear_stop_words(actual_text, stop_list)
+		actual_text = clear_one_stuff(actual_text)
+        	#stop = stop.replace("\n", ' ')
+		#print actual_text
+		for i in actual_text:
+			try:
+				temp = file_dict[i]
+				file_dict[i] = temp + 1
+			except:
+				file_dict[i] = 1
+		#print file_dict
+		return file_dict
+
+
+def weight_word(file_vectors, present, fvlen):
+	for elem  in range(0, len(file_vectors)):
+		temp = sorted(file_vectors[elem].items(), key = lambda x : x[1], reverse = True)
+		if temp:
+			max = temp[0][1]
+		#print max, temp[0][0]
+		#print fvlen
+		file_vector_weights = []
+		for i in temp:
+				tf = 0.5 + ((0.5 * i[1]) / max)
+				idf = math.log((fvlen / present[i[0]][0]), 2)
+				present[i[0]].append((elem + 1, tf * idf))
+	temp = sorted(present.items(), key = lambda x : x[0])
+	postings = []
+	fp = open('dictionary', 'w')
+	#jp = open('postings', 'w')
+	for i in temp:
+		fp.write(i[0] + "\n")
+		fp.write(str(i[1][0]) + "\n")
+		fp.write(str(len(postings) + 1) + "\n")
+		postings += i[1][1:]
+	fp.close()
+	jp = open("postings", "w")
+	jp.write("\n".join("%s %s" %x for x in postings))
+	jp.close()
+		
+					
+def tokenize(html, inputd, outputd):
+	#file vectors is the list containing word dictionaries for each file individually
+	file_vectors = []
+	#ud if the universal dictionary keeping track for how many timethe word has occured everywhere in the entire corpus
+	ud = {}
+	fp = open("stoplist.txt", r'U')
+	stop = (fp.read()).replace("'", ' ')
+	stop = stop.replace("\n", ' ')
+	stop = stop.split()
+	#create each file dictionary
+	for html_file in html:
+		file_dict = create_file_dict(html_file, stop)
+		file_vectors.append(file_dict)
+		#print len(file_vectors)
+		for i in file_dict.items():
+			try:
+				temp = ud[i[0]]
+				ud[i[0]] = temp + i[1]
+			except:
+				ud[i[0]] = i[1]
+	#print "Universal Word Dictionary and All File Dictionaries have been created"
+	#print "Beginning term weight calculations"
+	#print "Changing directory to output"
+
+	#print "Calculating What word occured in how many file"
+	#print ud
+	present = {}
+	#calculating the number of files in which a given key-word has occured. 
+	for i in ud.keys():
+		for j in file_vectors:
+			if(i in j.keys()):
+				try:
+					present[i][0] += 1
+				except:
+					present[i] = [1]
+	os.chdir(outputd)
+	print "Making final Weight calculations"
+	count = 1
+	#print present
+	#print file_vectors
+	#for filevector in file_vectors:
+		#print "----------------------"
+		#print filevector
+		#print "----------------------"
+	weight_word(file_vectors, present, len(file_vectors))
+		#fp  = open(str(count) + ".tws", "w")
+		#fp.write("ANY KEYWORD NOT IN FILE HAS A WEIGHT OF ZERO\n")
+	
+		#fp.close()
+		#count += 1
+	
+def main():
+	#start = time.time()
+	#Take input directories as arguements
+	input_dir, output_dir = sys.argv[1], sys.argv[2]
+	input_dir = os.getcwd() + '/'  + input_dir
+	output_dir = os.getcwd() + '/' + output_dir
+	#check if output directory exists, if not create it.
+	if not os.path.exists(output_dir):
+		os.makedirs(output_dir)
+	os.chdir(input_dir)
+	html = sorted(glob.glob("*.html"))
+	start = time.time()
+	tokenize(html, input_dir, output_dir)
+	end = time.time()
+	print end - start
+if __name__ == '__main__':
+    main()
